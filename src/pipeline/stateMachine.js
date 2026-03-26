@@ -65,6 +65,16 @@ class StateMachine {
 
     // Start consuming the transcript stream — runs concurrently with audio feeding
     this.#transcriptPromise = this.#transcribeSession.transcribe();
+    this.#transcriptPromise.catch(err => {
+      logger.error({
+        err,
+        name: err?.name,
+        message: err?.message,
+        code: err?.code,
+        fault: err?.$fault,
+        metadata: err?.$metadata,
+      }, 'Transcription stream error');
+    });
 
     this.#audioCapture = new AudioCapture();
     this.#audioCapture.on('data', chunk => this.#transcribeSession.pushAudio(chunk));

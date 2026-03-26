@@ -100,10 +100,16 @@ class InputDevice extends EventEmitter {
         const code  = buf.readUInt16LE(TIMEVAL_SIZE + 2);
         const value = buf.readInt32LE(TIMEVAL_SIZE + 4);
 
-        if (type === EV_KEY && code === this.#targetKeyCode) {
-          if (value === KEY_DOWN) this.emit('keydown');
-          else if (value === KEY_UP) this.emit('keyup');
-          // value === 2 is key repeat — ignored
+        if (type === EV_KEY) {
+          // Find key name
+          const keyName = Object.entries(KEY_CODES).find(([_, c]) => c === code)?.[0] || `UNKNOWN(${code})`;
+          logger.info({ code, keyName, value: value === KEY_DOWN ? 'DOWN' : value === KEY_UP ? 'UP' : 'REPEAT' }, 'Key event detected');
+          
+          if (code === this.#targetKeyCode) {
+            if (value === KEY_DOWN) this.emit('keydown');
+            else if (value === KEY_UP) this.emit('keyup');
+            // value === 2 is key repeat — ignored
+          }
         }
       } catch (err) {
         if (!this.#running) break; // Expected when stop() closes the fd

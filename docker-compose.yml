@@ -4,18 +4,12 @@ services:
     restart: unless-stopped
     env_file: .env
 
+    privileged: true
     devices:
       # ALSA audio hardware (mic + speaker)
       - /dev/snd:/dev/snd
-      # PTT keyboard — update to match PTT_INPUT_DEVICE in .env
-      # Use a stable path: ls /dev/input/by-id/  or  cat /proc/bus/input/devices
-      - /dev/input/event0:/dev/input/event0
-
-    volumes:
-      # ALSA device discovery inside the container
-      - /proc/asound:/proc/asound:ro
-      # Optional: mount host ALSA config for persistent device aliases
-      # - /etc/asound.conf:/etc/asound.conf:ro
+      # PTT keyboard — reads PTT_INPUT_DEVICE from .env
+      - ${PTT_INPUT_DEVICE}:${PTT_INPUT_DEVICE}
 
     # Add container process to the host audio and input groups.
     # Find the correct GIDs on your Pi:

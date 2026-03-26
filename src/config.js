@@ -27,6 +27,7 @@ export default Object.freeze({
     inputDevice: optional('AUDIO_INPUT_DEVICE', 'hw:1,0'),
     outputDevice: optional('AUDIO_OUTPUT_DEVICE', 'hw:0,0'),
     sampleRate: parseInt(optional('SAMPLE_RATE', '16000'), 10),
+    playbackLeadInMs: parseInt(optional('PLAYBACK_LEAD_IN_MS', '150'), 10),
   },
   polly: {
     voiceId: optional('POLLY_VOICE_ID', 'Joanna'),

@@ -64,23 +64,51 @@ export class TranscribeSession {
       AudioStream: this.#audioGenerator(),
     });
 
-    const { TranscriptResultStream } = await this.#client.send(command);
+    let TranscriptResultStream;
+    try {
+      ({ TranscriptResultStream } = await this.#client.send(command));
+    } catch (err) {
+      logger.error({
+        err,
+        name: err?.name,
+        message: err?.message,
+        code: err?.code,
+        fault: err?.$fault,
+        metadata: err?.$metadata,
+        sampleRate: config.audio.sampleRate,
+        inputDevice: config.audio.inputDevice,
+        region: config.aws.region,
+      }, 'Failed to start AWS Transcribe stream');
+      throw err;
+    }
 
     let transcript = '';
 
-    for await (const event of TranscriptResultStream) {
-      if (!event.TranscriptEvent) continue;
+    try {
+      for await (const event of TranscriptResultStream) {
+        if (!event.TranscriptEvent) continue;
 
-      const results = event.TranscriptEvent.Transcript?.Results ?? [];
-      for (const result of results) {
-        if (result.IsPartial) continue;
+        const results = event.TranscriptEvent.Transcript?.Results ?? [];
+        for (const result of results) {
+          if (result.IsPartial) continue;
 
-        const text = result.Alternatives?.[0]?.Transcript?.trim() ?? '';
-        if (text) {
-          transcript += (transcript ? ' ' : '') + text;
-          logger.debug({ partial: text }, 'Transcribe final segment');
+          const text = result.Alternatives?.[0]?.Transcript?.trim() ?? '';
+          if (text) {
+            transcript += (transcript ? ' ' : '') + text;
+            logger.debug({ partial: text }, 'Transcribe final segment');
+          }
         }
       }
+    } catch (err) {
+      logger.error({
+        err,
+        name: err?.name,
+        message: err?.message,
+        code: err?.code,
+        fault: err?.$fault,
+        metadata: err?.$metadata,
+      }, 'AWS Transcribe stream failed while reading results');
+      throw err;
     }
 
     return transcript.trim();
