@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+
 // Environment variables are loaded before this module runs via:
 //   node --env-file=.env  (local dev)
 //   docker-compose env_file directive (production)
@@ -12,6 +14,10 @@ function optional(name, defaultValue) {
   return process.env[name] ?? defaultValue;
 }
 
+function loadSystemPrompt() {
+  return readFileSync(new URL('./prompts/system.txt', import.meta.url), 'utf8').trim();
+}
+
 export default Object.freeze({
   aws: {
     region: required('AWS_REGION'),
@@ -21,7 +27,7 @@ export default Object.freeze({
   openai: {
     apiKey: required('OPENAI_API_KEY'),
     model: optional('OPENAI_MODEL', 'gpt-4o-mini'),
-    systemPrompt: optional('SYSTEM_PROMPT', 'You are a helpful assistant.'),
+    systemPrompt: loadSystemPrompt(),
   },
   audio: {
     inputDevice: optional('AUDIO_INPUT_DEVICE', 'hw:1,0'),
