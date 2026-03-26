@@ -12,7 +12,12 @@ const client = new PollyClient({
 });
 
 export async function synthesize(text) {
-  logger.debug({ chars: text.length, voice: config.polly.voiceId }, 'Synthesizing speech');
+  logger.debug({
+    chars: text.length,
+    voice: config.polly.voiceId,
+    engine: config.polly.engine,
+    region: config.aws.region,
+  }, 'Synthesizing speech');
 
   const command = new SynthesizeSpeechCommand({
     Text: text,

@@ -10,6 +10,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY src/ ./src/

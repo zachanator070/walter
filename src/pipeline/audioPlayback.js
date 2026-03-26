@@ -1,27 +1,47 @@
 import { spawn } from 'child_process';
+import { PassThrough } from 'stream';
 import config from '../config.js';
 import logger from '../utils/logger.js';
 
 class AudioPlayback {
   #process = null;
+  #stopping = false;
 
   // Pipes a Node.js Readable of raw PCM audio into aplay.
   // Resolves when playback finishes.
   play(audioStream) {
     return new Promise((resolve, reject) => {
+      const outputDevice = config.audio.outputDevice.startsWith('hw:')
+        ? config.audio.outputDevice.replace(/^hw:/, 'plughw:')
+        : config.audio.outputDevice;
+      const sampleRate = config.audio.sampleRate;
+      const leadInMs = config.audio.playbackLeadInMs;
+
       const args = [
-        '-D', config.audio.outputDevice,
+        '-D', outputDevice,
         '-f', 'S16_LE',
-        '-r', '16000',
+        '-r', String(sampleRate),
         '-c', '1',
         '-t', 'raw',
         '-q',
       ];
 
-      logger.debug({ device: config.audio.outputDevice }, 'Starting aplay');
+      logger.debug({
+        device: outputDevice,
+        configuredDevice: config.audio.outputDevice,
+        sampleRate,
+        leadInMs,
+      }, 'Starting aplay');
+      this.#stopping = false;
       this.#process = spawn('aplay', args, { stdio: ['pipe', 'ignore', 'pipe'] });
 
-      audioStream.pipe(this.#process.stdin);
+      const prefixedStream = new PassThrough();
+      const leadInBytes = Math.max(0, Math.round(sampleRate * 2 * (leadInMs / 1000)));
+      if (leadInBytes > 0) {
+        prefixedStream.write(Buffer.alloc(leadInBytes));
+      }
+      audioStream.pipe(prefixedStream);
+      prefixedStream.pipe(this.#process.stdin);
 
       // EPIPE is expected when aplay finishes before the stream ends
       this.#process.stdin.on('error', err => {
@@ -37,8 +57,12 @@ class AudioPlayback {
         reject(err);
       });
 
-      this.#process.on('close', () => {
+      this.#process.on('close', code => {
         this.#process = null;
+        if (!this.#stopping && code !== null && code !== 0) {
+          reject(new Error(`aplay exited with code ${code}`));
+          return;
+        }
         resolve();
       });
     });
@@ -46,6 +70,7 @@ class AudioPlayback {
 
   stop() {
     if (this.#process) {
+      this.#stopping = true;
       this.#process.kill('SIGTERM');
       this.#process = null;
     }
