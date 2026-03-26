@@ -1,0 +1,17 @@
+{
+  "name": "walter",
+  "version": "1.0.0",
+  "description": "Push-to-talk voice assistant for Raspberry Pi",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --max-old-space-size=256 --env-file=.env src/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-polly": "^3",
+    "@aws-sdk/client-transcribe-streaming": "^3",
+    "ioctl": "^2",
+    "openai": "^4",
+    "pino": "^9"
+  }
+}
