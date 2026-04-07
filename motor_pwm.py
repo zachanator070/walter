@@ -44,7 +44,7 @@ def main() -> int:
     pin = 18
     frequency = 1000.0
     duty_cycle = 60.0
-    ml_per_sec = 2.0
+    ml_per_sec = 1.0
 
     try:
         validate_args(args)
