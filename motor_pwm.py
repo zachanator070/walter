@@ -16,46 +16,35 @@ import RPi.GPIO as GPIO
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a DC motor on a Raspberry Pi GPIO pin using PWM."
+        description="Control a DC motor for dispensing liquid (by mL) or priming (continuous) on a Raspberry Pi GPIO pin using PWM."
     )
     parser.add_argument(
-        "--pin",
-        type=int,
-        default=18,
-        help="BCM GPIO pin used for PWM output (default: 18)",
+        "mode",
+        choices=["dispense", "prime"],
+        help="Mode: 'dispense' to run for a set volume (mL), 'prime' to run continuously until stopped."
     )
     parser.add_argument(
-        "--frequency",
+        "--volume",
         type=float,
-        default=1000.0,
-        help="PWM frequency in Hz (default: 1000)",
-    )
-    parser.add_argument(
-        "--duty-cycle",
-        type=float,
-        default=60.0,
-        help="Duty cycle percentage from 0 to 100 (default: 60)",
-    )
-    parser.add_argument(
-        "--duration",
-        type=float,
-        default=None,
-        help="Optional runtime in seconds. If omitted, runs until Ctrl+C.",
+        help="Volume to dispense in milliliters (required for 'dispense' mode)",
     )
     return parser.parse_args()
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    if not 0.0 <= args.duty_cycle <= 100.0:
-        raise ValueError("Duty cycle must be between 0 and 100.")
-    if args.frequency <= 0:
-        raise ValueError("Frequency must be greater than 0.")
-    if args.duration is not None and args.duration <= 0:
-        raise ValueError("Duration must be greater than 0.")
+    if args.mode == "dispense":
+        if args.volume is None or args.volume <= 0:
+            raise ValueError("For 'dispense' mode, --volume (mL) must be provided and > 0.")
+
 
 
 def main() -> int:
     args = parse_args()
+
+    pin = 18
+    frequency = 1000.0
+    duty_cycle = 60.0
+    ml_per_sec = 2.0
 
     try:
         validate_args(args)
@@ -64,9 +53,9 @@ def main() -> int:
         return 2
 
     GPIO.setmode(GPIO.BCM)
-    GPIO.setup(args.pin, GPIO.OUT)
+    GPIO.setup(pin, GPIO.OUT)
 
-    pwm = GPIO.PWM(args.pin, args.frequency)
+    pwm = GPIO.PWM(pin, frequency)
     should_stop = False
 
     def stop_handler(signum, frame):
@@ -78,19 +67,25 @@ def main() -> int:
     signal.signal(signal.SIGTERM, stop_handler)
 
     try:
-        pwm.start(args.duty_cycle)
+        pwm.start(duty_cycle)
         print(
-            f"Running PWM on BCM GPIO {args.pin} at {args.frequency} Hz "
-            f"with {args.duty_cycle}% duty cycle"
+            f"Running PWM on BCM GPIO {pin} at {frequency} Hz "
+            f"with {duty_cycle}% duty cycle"
         )
 
-        if args.duration is not None:
-            end_time = time.time() + args.duration
+        if args.mode == "dispense":
+            # Calculate duration based on volume and ml_per_sec
+            duration = args.volume / ml_per_sec
+            print(f"Dispensing {args.volume} mL (estimated {duration:.2f} seconds)...")
+            end_time = time.time() + duration
             while not should_stop and time.time() < end_time:
                 time.sleep(0.1)
-        else:
+            print("Dispense complete.")
+        elif args.mode == "prime":
+            print("Priming motor. Press Ctrl+C to stop.")
             while not should_stop:
                 time.sleep(0.1)
+            print("Prime stopped.")
     finally:
         pwm.stop()
         GPIO.cleanup()
