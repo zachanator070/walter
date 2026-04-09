@@ -61,9 +61,9 @@ EMAIL_PASSWORD = os.getenv("SMTP_PASSWORD", "your_password")
 SMTP_HOST      = os.getenv("SMTP_HOST",      "smtp.gmail.com")
 SMTP_PORT      = int(os.getenv("SMTP_PORT",  "587"))
 
-# Goldfish safe range in Celsius (50–72 °F → 10–22 °C)
-TEMP_MIN_C = 10.0
-TEMP_MAX_C = 22.0
+# Goldfish safe range in Celsius
+TEMP_MIN_C = 20.0
+TEMP_MAX_C = 24.0
 # ---------------------------------------------------------------------------
 
 
