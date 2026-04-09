@@ -55,9 +55,9 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Configuration — edit here or override via .env / environment variables
 # ---------------------------------------------------------------------------
-EMAIL_FROM     = os.getenv("EMAIL_FROM",     "alerts@example.com")
-EMAIL_TO       = os.getenv("EMAIL_TO",       "owner@example.com")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD", "your_password")
+EMAIL_FROM     = os.getenv("SMTP_USER",     "alerts@example.com")
+EMAIL_TO       = os.getenv("SMTP_TO",       "owner@example.com")
+EMAIL_PASSWORD = os.getenv("SMTP_PASSWORD", "your_password")
 SMTP_HOST      = os.getenv("SMTP_HOST",      "smtp.gmail.com")
 SMTP_PORT      = int(os.getenv("SMTP_PORT",  "587"))
 
