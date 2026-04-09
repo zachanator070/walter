@@ -80,39 +80,22 @@ def read_ds18b20() -> float:
     with open(sensors[0]) as f:
         lines = f.readlines()
 
-    if "YES" not in lines[0]:
-        raise RuntimeError("Sensor CRC check failed — bad reading, try again.")
+        if "YES" not in lines[0]:
+            raise RuntimeError("Sensor CRC check failed — bad reading, try again.")
 
-    equals_pos = lines[1].find("t=")
-    if equals_pos == -1:
-        raise RuntimeError("Unexpected sensor output format.")
+        equals_pos = lines[1].find("t=")
+        if equals_pos == -1:
+            raise RuntimeError("Unexpected sensor output format.")
 
-    return float(lines[1][equals_pos + 2:]) / 1000.0
+        return float(lines[1][equals_pos + 2:]) / 1000.0
 
 
 def c_to_f(celsius: float) -> float:
     return celsius * 9 / 5 + 32
 
 
-def send_alert(temp_c: float) -> None:
-    temp_f = c_to_f(temp_c)
-    min_f  = c_to_f(TEMP_MIN_C)
-    max_f  = c_to_f(TEMP_MAX_C)
-
-    if temp_c < TEMP_MIN_C:
-        condition = f"TOO COLD ({temp_c:.1f} °C / {temp_f:.1f} °F)"
-    else:
-        condition = f"TOO WARM ({temp_c:.1f} °C / {temp_f:.1f} °F)"
-
-    subject = f"[Walter] Goldfish tank temperature alert: {condition}"
-    body = (
-        f"Current temperature: {temp_c:.1f} °C ({temp_f:.1f} °F)\n"
-        f"Safe range:          {TEMP_MIN_C:.1f}–{TEMP_MAX_C:.1f} °C "
-        f"({min_f:.1f}–{max_f:.1f} °F)\n\n"
-        f"Status: {condition}\n\n"
-        "Please check the tank immediately."
-    )
-
+def send_alert(subject: str, body: str) -> None:
+    """Send an alert email with the given subject and body."""
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"]    = EMAIL_FROM
@@ -124,25 +107,46 @@ def send_alert(temp_c: float) -> None:
         smtp.login(EMAIL_FROM, EMAIL_PASSWORD)
         smtp.sendmail(EMAIL_FROM, [EMAIL_TO], msg.as_string())
 
-    print(f"Alert sent to {EMAIL_TO}: {condition}")
+    print(f"Alert sent to {EMAIL_TO}: {subject}")
 
 
 def main() -> None:
+    temp_c = None
     try:
         temp_c = read_ds18b20()
     except RuntimeError as e:
-        print(f"Error reading sensor: {e}", file=sys.stderr)
+        msg = f"Error reading temperature probe: {e}"
+        print(msg, file=sys.stderr)
+        try:
+            send_alert("[Walter] Temperature probe error", msg)
+        except Exception as mail_err:
+            print(f"Failed to send error alert: {mail_err}", file=sys.stderr)
         sys.exit(1)
 
     temp_f = c_to_f(temp_c)
+    min_f  = c_to_f(TEMP_MIN_C)
+    max_f  = c_to_f(TEMP_MAX_C)
     print(f"Temperature: {temp_c:.1f} °C / {temp_f:.1f} °F")
 
     if TEMP_MIN_C <= temp_c <= TEMP_MAX_C:
         print(f"OK — within safe range ({TEMP_MIN_C}–{TEMP_MAX_C} °C)")
     else:
+        condition = f"TOO WARM ({temp_c:.1f} °C / {temp_f:.1f} °F)"        
+        if temp_c < TEMP_MIN_C:
+            condition = f"TOO COLD ({temp_c:.1f} °C / {temp_f:.1f} °F)"
+
+        subject = f"[Walter] Goldfish tank temperature alert: {condition}"
+        body = (
+            f"Current temperature: {temp_c:.1f} °C ({temp_f:.1f} °F)\n"
+            f"Safe range:          {TEMP_MIN_C:.1f}–{TEMP_MAX_C:.1f} °C "
+            f"({min_f:.1f}–{max_f:.1f} °F)\n\n"
+            f"Status: {condition}\n\n"
+            "Please check the tank immediately."
+        )
+
         print("WARNING — outside safe range, sending alert email...")
         try:
-            send_alert(temp_c)
+            send_alert(subject, body)
         except Exception as e:
             print(f"Failed to send email: {e}", file=sys.stderr)
             sys.exit(1)
