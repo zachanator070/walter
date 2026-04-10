@@ -32,6 +32,7 @@ import glob
 import os
 import smtplib
 import sys
+import time
 from email.mime.text import MIMEText
 
 
@@ -64,6 +65,10 @@ SMTP_PORT      = int(os.getenv("SMTP_PORT",  "587"))
 # Goldfish safe range in Celsius
 TEMP_MIN_C = 20.0
 TEMP_MAX_C = 24.0
+
+# Retry / backoff settings for sensor reads
+SENSOR_MAX_RETRIES  = int(os.getenv("SENSOR_MAX_RETRIES",  "5"))
+SENSOR_BACKOFF_BASE = float(os.getenv("SENSOR_BACKOFF_BASE", "5.0"))  # seconds
 # ---------------------------------------------------------------------------
 
 
@@ -79,6 +84,9 @@ def read_ds18b20() -> float:
 
     with open(sensors[0]) as f:
         lines = f.readlines()
+
+        if len(lines) < 2:
+            raise RuntimeError("Sensor returned incomplete data — try again.")
 
         if "YES" not in lines[0]:
             raise RuntimeError("Sensor CRC check failed — bad reading, try again.")
@@ -112,10 +120,24 @@ def send_alert(subject: str, body: str) -> None:
 
 def main() -> None:
     temp_c = None
-    try:
-        temp_c = read_ds18b20()
-    except RuntimeError as e:
-        msg = f"Error reading temperature probe: {e}"
+    last_err: RuntimeError | None = None
+    for attempt in range(SENSOR_MAX_RETRIES):
+        try:
+            temp_c = read_ds18b20()
+            break
+        except RuntimeError as e:
+            last_err = e
+            if attempt < SENSOR_MAX_RETRIES - 1:
+                delay = SENSOR_BACKOFF_BASE * (2 ** attempt)
+                print(
+                    f"Sensor read failed (attempt {attempt + 1}/{SENSOR_MAX_RETRIES}): {e} "
+                    f"— retrying in {delay:.1f}s",
+                    file=sys.stderr,
+                )
+                time.sleep(delay)
+
+    if temp_c is None:
+        msg = f"Error reading temperature probe after {SENSOR_MAX_RETRIES} attempts: {last_err}"
         print(msg, file=sys.stderr)
         try:
             send_alert("[Walter] Temperature probe error", msg)
