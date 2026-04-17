@@ -99,23 +99,21 @@ class InputDevice extends EventEmitter {
 
         if (bytesRead < EVENT_SIZE) continue;
 
-        const type  = buf.readUInt16LE(TIMEVAL_SIZE);
-        const code  = buf.readUInt16LE(TIMEVAL_SIZE + 2);
+        const type = buf.readUInt16LE(TIMEVAL_SIZE);
+        const code = buf.readUInt16LE(TIMEVAL_SIZE + 2);
         const value = buf.readInt32LE(TIMEVAL_SIZE + 4);
 
         if (type === EV_KEY) {
-          // Find key name
           const keyName = Object.entries(KEY_CODES).find(([_, c]) => c === code)?.[0] || `UNKNOWN(${code})`;
           logger.info({ code, keyName, value: value === KEY_DOWN ? 'DOWN' : value === KEY_UP ? 'UP' : 'REPEAT' }, 'Key event detected');
-          
+
           if (code === this.#targetKeyCode) {
             if (value === KEY_DOWN) this.emit('keydown');
             else if (value === KEY_UP) this.emit('keyup');
-            // value === 2 is key repeat — ignored
           }
         }
       } catch (err) {
-        if (!this.#running) break; // Expected when stop() closes the fd
+        if (!this.#running) break;
         if (this.#isDisconnectError(err)) {
           logger.warn({ code: err.code, message: err.message }, 'Input device disconnected — reconnecting');
           await this.#closeDevice();
@@ -125,7 +123,6 @@ class InputDevice extends EventEmitter {
         throw err;
       }
     }
-
   }
 
   async stop() {
@@ -135,7 +132,6 @@ class InputDevice extends EventEmitter {
     this.#fileHandle = null;
 
     if (fileHandle) {
-      // Avoid a blocking ungrab during process shutdown; the OS releases it on exit.
       fileHandle.close().catch(err => {
         logger.debug({ err }, 'Input device close after shutdown request');
       });
@@ -147,17 +143,28 @@ class InputDevice extends EventEmitter {
         new Promise(resolve => setTimeout(resolve, 250)),
       ]);
     }
+  }
+
+  async #openDevice() {
+    const devicePath = config.ptt.inputDevice;
 
     try {
-      const { default: ioctl } = await import('ioctl');
-      ioctl(this.#fileHandle.fd, EVIOCGRAB, 1);
-      logger.info({ devicePath }, 'Input device opened and grabbed exclusively');
-    } catch (err) {
-      logger.warn({ err: err.message }, 'Could not grab device exclusively — key events may reach other processes');
-      logger.info({ devicePath }, 'Input device opened');
-    }
+      this.#fileHandle = await open(devicePath, 0);
 
-    return true;
+      try {
+        const { default: ioctl } = await import('ioctl');
+        ioctl(this.#fileHandle.fd, EVIOCGRAB, 1);
+        logger.info({ devicePath }, 'Input device opened and grabbed exclusively');
+      } catch (err) {
+        logger.warn({ err: err.message }, 'Could not grab device exclusively — key events may reach other processes');
+        logger.info({ devicePath }, 'Input device opened');
+      }
+
+      return true;
+    } catch (err) {
+      logger.warn({ devicePath, code: err?.code, message: err?.message }, 'PTT input device unavailable');
+      return false;
+    }
   }
 
   async #closeDevice() {
