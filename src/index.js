@@ -1,10 +1,29 @@
+import { spawn } from 'child_process';
 import logger from './utils/logger.js';
 import stateMachine from './pipeline/stateMachine.js';
 
-async function shutdown(signal) {
+let shuttingDown = false;
+
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   logger.info({ signal }, 'Shutting down');
-  await stateMachine.stop();
-  process.exit(0);
+
+  try {
+    const killer = spawn('sh', ['-c', `sleep 1; kill -9 ${process.pid} >/dev/null 2>&1 || true`], {
+      detached: true,
+      stdio: 'ignore',
+    });
+    killer.unref();
+  } catch {}
+
+  void Promise.resolve(stateMachine.stop()).catch(err => {
+    logger.error({ err, signal }, 'Error during shutdown');
+  });
+
+  process.exitCode = 0;
+  setTimeout(() => process.exit(0), 25).unref();
 }
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -40,12 +40,12 @@ class StateMachine {
 
   async stop() {
     try {
-      await inputDevice.stop();
-    } finally {
       if (this.#audioCapture) {
         await this.#audioCapture.stop();
         this.#audioCapture = null;
       }
+      await inputDevice.stop();
+    } finally {
       audioPlayback.stop();
     }
   }

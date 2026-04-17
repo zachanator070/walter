@@ -7,6 +7,7 @@ export class AudioCapture extends EventEmitter {
   #process = null;
   #stopping = false;
   #segmentActive = false;
+  #sawExpectedExit = false;
   #prebuffer = [];
   #prebufferBytes = 0;
   #maxPrebufferBytes = Math.max(
@@ -36,6 +37,7 @@ export class AudioCapture extends EventEmitter {
       preRollMs: config.audio.preRollMs,
     }, 'Starting arecord');
     this.#stopping = false;
+    this.#sawExpectedExit = false;
     this.#process = spawn('arecord', args, { stdio: ['ignore', 'pipe', 'pipe'] });
 
     this.#process.stdout.on('data', chunk => {
@@ -49,9 +51,13 @@ export class AudioCapture extends EventEmitter {
       const msg = data.toString().trim();
       if (!msg) return;
 
-      if (this.#stopping && this.#isExpectedShutdownMessage(msg)) {
-        logger.debug({ msg }, 'arecord stopped');
-        return;
+      if (this.#isExpectedShutdownMessage(msg)) {
+        this.#sawExpectedExit = true;
+
+        if (this.#stopping) {
+          logger.debug({ msg }, 'arecord stopped');
+          return;
+        }
       }
 
       logger.debug({ msg }, 'arecord');
@@ -66,8 +72,9 @@ export class AudioCapture extends EventEmitter {
       this.#process = null;
       this.#segmentActive = false;
 
-      if (this.#stopping) {
-        logger.debug({ code, signal }, 'arecord exited after stop request');
+      if (this.#stopping || this.#sawExpectedExit) {
+        logger.debug({ code, signal, expected: this.#sawExpectedExit }, 'arecord exited during shutdown');
+        this.#sawExpectedExit = false;
         return;
       }
 
@@ -111,6 +118,7 @@ export class AudioCapture extends EventEmitter {
       };
 
       proc.once('close', finish);
+      proc.once('exit', finish);
 
       const escalate = signal => {
         if (proc.exitCode === null && proc.signalCode === null) {
@@ -120,9 +128,15 @@ export class AudioCapture extends EventEmitter {
         }
       };
 
+      if (proc.exitCode !== null || proc.signalCode !== null || proc.killed) {
+        finish();
+        return;
+      }
+
       escalate('SIGINT');
       setTimeout(() => escalate('SIGTERM'), 1000).unref();
       setTimeout(() => escalate('SIGKILL'), 2500).unref();
+      setTimeout(finish, 3000).unref();
     });
   }
 

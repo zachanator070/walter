@@ -42,6 +42,7 @@ const KEY_CODES = {
 class InputDevice extends EventEmitter {
   #fileHandle = null;
   #running = false;
+  #readLoopPromise = null;
   #targetKeyCode;
   #reconnectDelayMs = 1000;
 
@@ -61,12 +62,16 @@ class InputDevice extends EventEmitter {
     logger.info({ devicePath, key: config.ptt.key }, 'Starting PTT input device');
 
     this.#running = true;
-    this.#readLoop().catch(err => {
-      if (this.#running) {
-        logger.error({ err }, 'Input device read loop error');
-        this.emit('error', err);
-      }
-    });
+    this.#readLoopPromise = this.#readLoop()
+      .catch(err => {
+        if (this.#running) {
+          logger.error({ err }, 'Input device read loop error');
+          this.emit('error', err);
+        }
+      })
+      .finally(() => {
+        this.#readLoopPromise = null;
+      });
   }
 
   async #readLoop() {
@@ -125,16 +130,22 @@ class InputDevice extends EventEmitter {
 
   async stop() {
     this.#running = false;
-    await this.#closeDevice();
-  }
 
-  async #openDevice() {
-    const devicePath = config.ptt.inputDevice;
-    try {
-      this.#fileHandle = await open(devicePath, 0);
-    } catch (err) {
-      logger.warn({ devicePath, code: err.code, message: err.message }, 'Could not open PTT input device — retrying');
-      return false;
+    const fileHandle = this.#fileHandle;
+    this.#fileHandle = null;
+
+    if (fileHandle) {
+      // Avoid a blocking ungrab during process shutdown; the OS releases it on exit.
+      fileHandle.close().catch(err => {
+        logger.debug({ err }, 'Input device close after shutdown request');
+      });
+    }
+
+    if (this.#readLoopPromise) {
+      await Promise.race([
+        this.#readLoopPromise,
+        new Promise(resolve => setTimeout(resolve, 250)),
+      ]);
     }
 
     try {
