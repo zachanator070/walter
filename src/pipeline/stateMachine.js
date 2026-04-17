@@ -24,14 +24,30 @@ class StateMachine {
     inputDevice.on('keyup',   () => this.#onKeyUp());
     inputDevice.on('error',   err => logger.error({ err }, 'Input device error'));
 
+    this.#audioCapture = new AudioCapture();
+    this.#audioCapture.on('data', chunk => {
+      if (this.#transcribeSession) {
+        this.#transcribeSession.pushAudio(chunk);
+      }
+    });
+    this.#audioCapture.on('error', err => logger.error({ err }, 'Audio capture error'));
+    this.#audioCapture.start();
+
     await inputDevice.start();
 
     logger.info(`Walter ready — hold ${config.ptt.key} to speak`);
   }
 
   async stop() {
-    await inputDevice.stop();
-    audioPlayback.stop();
+    try {
+      await inputDevice.stop();
+    } finally {
+      if (this.#audioCapture) {
+        await this.#audioCapture.stop();
+        this.#audioCapture = null;
+      }
+      audioPlayback.stop();
+    }
   }
 
   #onKeyDown() {
@@ -76,17 +92,14 @@ class StateMachine {
       }, 'Transcription stream error');
     });
 
-    this.#audioCapture = new AudioCapture();
-    this.#audioCapture.on('data', chunk => this.#transcribeSession.pushAudio(chunk));
-    this.#audioCapture.on('error', err => logger.error({ err }, 'Audio capture error'));
-    this.#audioCapture.start();
+    this.#audioCapture.beginSegment();
 
-    logger.info('Listening...');
+    logger.info({ preRollMs: config.audio.preRollMs }, 'Listening...');
   }
 
   async #process() {
-    // Stop mic, signal end of audio to Transcribe
-    await this.#audioCapture.stop();
+    // Stop feeding the current segment, but keep the recorder alive for pre-roll
+    this.#audioCapture.endSegment();
     this.#transcribeSession.endAudio();
 
     // Wait for Transcribe to finalize
@@ -95,9 +108,14 @@ class StateMachine {
       transcript = await this.#transcriptPromise;
     } catch (err) {
       logger.error({ err }, 'Transcription error');
+      this.#transcribeSession = null;
+      this.#transcriptPromise = null;
       this.#setState(STATES.IDLE);
       return;
     }
+
+    this.#transcribeSession = null;
+    this.#transcriptPromise = null;
 
     if (!transcript) {
       logger.info('No speech detected');
