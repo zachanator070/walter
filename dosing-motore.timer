@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Walter thermostat check daily at midnight
+Description=Run Walter dosing motor daily at midnight
 
 [Timer]
 OnCalendar=*-*-* 00:00:00
