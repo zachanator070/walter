@@ -1,0 +1,12 @@
+[Unit]
+Description=Walter thermostat check
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+WorkingDirectory=/opt/walter
+EnvironmentFile=/opt/walter/.env
+ExecStart=/usr/bin/python3 /opt/walter/motor_pwm.py dispense --volume 7
+NoNewPrivileges=true

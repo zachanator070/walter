@@ -1,0 +1,9 @@
+[Unit]
+Description=Run Walter thermostat check daily at midnight
+
+[Timer]
+OnCalendar=*-*-* 00:00:00
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
