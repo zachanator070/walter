@@ -1,5 +1,5 @@
 [Unit]
-Description=Walter thermostat check
+Description=Walter dosing motor service
 After=network-online.target
 
 [Service]
