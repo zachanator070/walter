@@ -10,6 +10,7 @@ export class AudioCapture extends EventEmitter {
   #sawExpectedExit = false;
   #prebuffer = [];
   #prebufferBytes = 0;
+  #finalizeNotifier = null;
   #maxPrebufferBytes = Math.max(
     0,
     Math.round(config.audio.sampleRate * 2 * (config.audio.preRollMs / 1000))
@@ -49,6 +50,7 @@ export class AudioCapture extends EventEmitter {
       this.#rememberChunk(chunk);
       if (this.#segmentActive) {
         this.emit('data', chunk);
+        this.#finalizeNotifier?.(chunk.length);
       }
     });
 
@@ -103,6 +105,53 @@ export class AudioCapture extends EventEmitter {
 
   endSegment() {
     this.#segmentActive = false;
+  }
+
+  // Keep forwarding audio after key-up until arecord goes quiet (captures trailing speech).
+  finalizeSegment() {
+    return new Promise(resolve => {
+      if (!this.#segmentActive) {
+        resolve();
+        return;
+      }
+
+      const maxWaitMs = 600;
+      const quietMs = 150;
+      const startedAt = Date.now();
+      let quietTimer;
+      let maxTimer;
+      let bytesForwarded = 0;
+
+      const finish = () => {
+        this.#finalizeNotifier = null;
+        clearTimeout(quietTimer);
+        clearTimeout(maxTimer);
+        this.#segmentActive = false;
+        logger.debug({
+          bytesForwarded,
+          elapsedMs: Date.now() - startedAt,
+        }, 'Audio segment finalized');
+        resolve();
+      };
+
+      this.#finalizeNotifier = byteLength => {
+        bytesForwarded += byteLength;
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(finish, quietMs);
+      };
+
+      maxTimer = setTimeout(finish, maxWaitMs);
+      quietTimer = setTimeout(finish, quietMs);
+    });
+  }
+
+  // Release the capture device (e.g. before speaker playback on half-duplex hardware).
+  suspend() {
+    return this.stop();
+  }
+
+  resume() {
+    this.start();
   }
 
   stop() {

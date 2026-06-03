@@ -3,6 +3,15 @@ import { Readable } from 'stream';
 import config from '../config.js';
 import logger from '../utils/logger.js';
 
+async function streamToBuffer(stream) {
+  const nodeStream = stream instanceof Readable ? stream : Readable.fromWeb(stream);
+  const chunks = [];
+  for await (const chunk of nodeStream) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 const client = new PollyClient({
   region: config.aws.region,
   credentials: {
@@ -19,19 +28,18 @@ export async function synthesize(text) {
     region: config.aws.region,
   }, 'Synthesizing speech');
 
+  const sampleRate = String(config.audio.sampleRate);
   const command = new SynthesizeSpeechCommand({
     Text: text,
     OutputFormat: 'pcm',  // Raw PCM avoids MP3 decode CPU cost on the Pi
-    SampleRate: '16000',
+    SampleRate: sampleRate,
     VoiceId: config.polly.voiceId,
     Engine: config.polly.engine,
   });
 
   const { AudioStream } = await client.send(command);
+  const pcm = await streamToBuffer(AudioStream);
 
-  // AWS SDK v3 returns a web ReadableStream in some environments; normalize to Node.js Readable
-  if (AudioStream instanceof Readable) {
-    return AudioStream;
-  }
-  return Readable.fromWeb(AudioStream);
+  logger.debug({ bytes: pcm.length, sampleRate }, 'Speech synthesized');
+  return pcm;
 }

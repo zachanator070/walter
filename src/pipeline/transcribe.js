@@ -22,6 +22,7 @@ export class TranscribeSession {
   #client;
   #pending = Buffer.alloc(0);
   #frameBytes = frameBytes(config.audio.sampleRate);
+  #bytesReceived = 0;
 
   constructor() {
     this.#client = new TranscribeStreamingClient({
@@ -35,6 +36,7 @@ export class TranscribeSession {
 
   // Called by audioCapture to feed raw PCM chunks into the stream
   pushAudio(chunk) {
+    this.#bytesReceived += chunk.length;
     this.#enqueueFrames(chunk);
   }
 
@@ -46,6 +48,10 @@ export class TranscribeSession {
     }
     this.#ended = true;
     this.#wakeGenerator();
+    logger.info({
+      bytesReceived: this.#bytesReceived,
+      framesQueued: this.#audioQueue.length,
+    }, 'Transcribe audio stream closed');
   }
 
   #enqueueFrames(chunk) {

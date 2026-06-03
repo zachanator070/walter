@@ -98,54 +98,61 @@ class StateMachine {
   }
 
   async #process() {
-    // Stop feeding the current segment, but keep the recorder alive for pre-roll
-    this.#audioCapture.endSegment();
-    this.#transcribeSession.endAudio();
-
-    // Wait for Transcribe to finalize
-    let transcript;
     try {
-      transcript = await this.#transcriptPromise;
-    } catch (err) {
-      logger.error({ err }, 'Transcription error');
+      // Capture trailing audio after key-up before closing the Transcribe stream.
+      await this.#audioCapture.finalizeSegment();
+      this.#transcribeSession.endAudio();
+
+      let transcript;
+      try {
+        transcript = await this.#transcriptPromise;
+      } catch (err) {
+        logger.error({ err }, 'Transcription error');
+        this.#transcribeSession = null;
+        this.#transcriptPromise = null;
+        this.#setState(STATES.IDLE);
+        return;
+      }
+
       this.#transcribeSession = null;
       this.#transcriptPromise = null;
+
+      if (!transcript) {
+        logger.info('No speech detected');
+        this.#setState(STATES.IDLE);
+        return;
+      }
+
+      logger.info({ transcript }, 'Transcript');
+
+      let response;
+      try {
+        response = await chatComplete(transcript);
+      } catch (err) {
+        logger.error({ err }, 'Chat completion error');
+        this.#setState(STATES.IDLE);
+        return;
+      }
+
+      logger.info({ response }, 'ChatGPT response');
+
+      try {
+        const pcm = await synthesize(response);
+        await this.#audioCapture.suspend();
+        try {
+          await audioPlayback.play(pcm);
+        } finally {
+          this.#audioCapture.resume();
+        }
+      } catch (err) {
+        logger.error({ err }, 'Synthesis/playback error');
+      }
+
       this.#setState(STATES.IDLE);
-      return;
-    }
-
-    this.#transcribeSession = null;
-    this.#transcriptPromise = null;
-
-    if (!transcript) {
-      logger.info('No speech detected');
-      this.#setState(STATES.IDLE);
-      return;
-    }
-
-    logger.info({ transcript }, 'Transcript');
-
-    // Send to ChatGPT
-    let response;
-    try {
-      response = await chatComplete(transcript);
     } catch (err) {
-      logger.error({ err }, 'Chat completion error');
+      logger.error({ err }, 'Processing pipeline error');
       this.#setState(STATES.IDLE);
-      return;
     }
-
-    logger.info({ response }, 'ChatGPT response');
-
-    // Synthesize and play
-    try {
-      const audioStream = await synthesize(response);
-      await audioPlayback.play(audioStream);
-    } catch (err) {
-      logger.error({ err }, 'Synthesis/playback error');
-    }
-
-    this.#setState(STATES.IDLE);
   }
 }
 
