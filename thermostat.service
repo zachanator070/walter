@@ -1,12 +1,18 @@
 [Unit]
-Description=Walter thermostat check
+Description=Walter thermostat metrics exporter
+Wants=network-online.target
 After=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/opt/walter
 EnvironmentFile=/opt/walter/.env
 ExecStart=/usr/bin/python3 /opt/walter/thermostat.py
+Restart=on-failure
+RestartSec=5
 NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
