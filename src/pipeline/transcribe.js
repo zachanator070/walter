@@ -5,11 +5,23 @@ import {
 import config from '../config.js';
 import logger from '../utils/logger.js';
 
+// AWS recommends 50–200 ms chunks; large arecord reads after event-loop stalls
+// trigger "Your stream is too big" if forwarded unchanged.
+const FRAME_MS = 100;
+const MAX_AUDIO_CHUNK_BYTES = 32000;
+
+function frameBytes(sampleRate) {
+  const target = Math.round(sampleRate * 2 * (FRAME_MS / 1000));
+  return Math.min(MAX_AUDIO_CHUNK_BYTES, Math.max(640, target));
+}
+
 export class TranscribeSession {
   #audioQueue = [];
   #audioResolve = null;
   #ended = false;
   #client;
+  #pending = Buffer.alloc(0);
+  #frameBytes = frameBytes(config.audio.sampleRate);
 
   constructor() {
     this.#client = new TranscribeStreamingClient({
@@ -23,16 +35,30 @@ export class TranscribeSession {
 
   // Called by audioCapture to feed raw PCM chunks into the stream
   pushAudio(chunk) {
-    this.#audioQueue.push(chunk);
-    if (this.#audioResolve) {
-      this.#audioResolve();
-      this.#audioResolve = null;
-    }
+    this.#enqueueFrames(chunk);
   }
 
   // Called on key release to signal end of audio
   endAudio() {
+    if (this.#pending.length > 0) {
+      this.#audioQueue.push(this.#pending);
+      this.#pending = Buffer.alloc(0);
+    }
     this.#ended = true;
+    this.#wakeGenerator();
+  }
+
+  #enqueueFrames(chunk) {
+    this.#pending = Buffer.concat([this.#pending, chunk]);
+
+    while (this.#pending.length >= this.#frameBytes) {
+      this.#audioQueue.push(this.#pending.subarray(0, this.#frameBytes));
+      this.#pending = this.#pending.subarray(this.#frameBytes);
+      this.#wakeGenerator();
+    }
+  }
+
+  #wakeGenerator() {
     if (this.#audioResolve) {
       this.#audioResolve();
       this.#audioResolve = null;

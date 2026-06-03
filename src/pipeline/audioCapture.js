@@ -22,11 +22,16 @@ export class AudioCapture extends EventEmitter {
       ? config.audio.inputDevice.replace(/^hw:/, 'plughw:')
       : config.audio.inputDevice;
 
+    // Small period/buffer sizes keep stdout reads short so event-loop stalls
+    // (e.g. PTT key-repeat floods) are less likely to overrun or batch huge chunks.
+    const periodSize = Math.max(128, Math.round(config.audio.sampleRate * 0.05));
     const args = [
       '-D', inputDevice,
       '-f', 'S16_LE',
       '-r', String(config.audio.sampleRate),
       '-c', '1',
+      '--period-size', String(periodSize),
+      '--buffer-size', String(periodSize * 4),
       '-t', 'raw',
       '-q',
     ];

@@ -105,7 +105,14 @@ class InputDevice extends EventEmitter {
 
         if (type === EV_KEY) {
           const keyName = Object.entries(KEY_CODES).find(([_, c]) => c === code)?.[0] || `UNKNOWN(${code})`;
-          logger.info({ code, keyName, value: value === KEY_DOWN ? 'DOWN' : value === KEY_UP ? 'UP' : 'REPEAT' }, 'Key event detected');
+          const valueLabel = value === KEY_DOWN ? 'DOWN' : value === KEY_UP ? 'UP' : 'REPEAT';
+          const logPayload = { code, keyName, value: valueLabel };
+
+          if (valueLabel === 'REPEAT') {
+            logger.debug(logPayload, 'Key event detected');
+          } else {
+            logger.info(logPayload, 'Key event detected');
+          }
 
           if (code === this.#targetKeyCode) {
             if (value === KEY_DOWN) this.emit('keydown');
