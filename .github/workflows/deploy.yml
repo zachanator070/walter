@@ -23,6 +23,5 @@ jobs:
           script: |
             cd /opt/walter
             git pull
-            npm ci
             sudo systemctl restart walter
             sudo systemctl restart thermostat
