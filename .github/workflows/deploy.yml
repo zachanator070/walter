@@ -1,0 +1,24 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to storm via thezachcave.com
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          proxy_host: thezachcave.com
+          proxy_username: ${{ secrets.SSH_USER }}
+          proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.STORM_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/walter
+            git pull
+            npm ci

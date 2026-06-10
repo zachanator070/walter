@@ -10,6 +10,7 @@
   "dependencies": {
     "@aws-sdk/client-polly": "^3",
     "@aws-sdk/client-transcribe-streaming": "^3",
+    "@modelcontextprotocol/sdk": "^1",
     "ioctl": "^2",
     "openai": "^4",
     "pino": "^9"
