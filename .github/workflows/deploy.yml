@@ -14,6 +14,7 @@ jobs:
         uses: appleboy/ssh-action@v1.2.0
         with:
           proxy_host: thezachcave.com
+          proxy_port: ${{ secrets.INPUT_PROXY_PORT }}
           proxy_username: ${{ secrets.SSH_USER }}
           proxy_key: ${{ secrets.SSH_PRIVATE_KEY }}
           host: ${{ secrets.STORM_HOST }}
